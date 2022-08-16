@@ -44,5 +44,5 @@ jobs:
           platforms: linux/arm/v7
           tags: |
             ${{ env.REGISTRY }}/lorabridge/gateway-device_manager:latest
-          #cache-from: type=registry,ref=${{ env.REGISTRY }}/lorabridge/gateway-device_manager:latest
-          #cache-to: type=inline
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/lorabridge/gateway-device_manager:latest
+          cache-to: type=inline
