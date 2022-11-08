@@ -77,8 +77,14 @@ def on_message(client, userdata, msg):
     else:
         # state update
         dev_data = rclient.hgetall(rkey)
+        str_data = json.dumps(list(data.keys()))
+        if dev_data['measurement'] != str_data:
+            dev_data['measurement'] = str_data
+            rclient.hset(rkey, mapping=dev_data)
         dev_data['measurement'] = json.loads(dev_data['measurement'])
         dev_data.update({"value": data})
+        if dev_data['measurement'] != str_data:
+            client.publish(DISCOVERY_TOPIC, json.dumps(dev_data))
         client.publish(STATE_TOPIC, json.dumps(dev_data))
 
 
