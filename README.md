@@ -1,6 +1,6 @@
 # Gateway Device Manager
 
-This repository is part of the LoRaBridge project.
+This repository is part of the [LoRaBridge](https://github.com/lorabridge/lorabridge) project.
 It provides the docker image for the Device Management used on our gateway device.
 
 The Device Manager is a self-provided Python3 application keeping track of the discovered devices via the Redis server. 
