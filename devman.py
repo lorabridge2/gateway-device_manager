@@ -19,34 +19,39 @@ def get_fileenv(var: str):
         Content of the environment variable file if exists, or the value of the environment variable.
         None if the environment variable does not exist.
     """
-    if path := os.environ.get(var + '_FILE'):
+    if path := os.environ.get(var + "_FILE"):
         with open(path) as file:
             return file.read().strip()
     else:
         try:
-            with open(os.path.join('run', 'secrets', var.lower())) as file:
+            with open(os.path.join("run", "secrets", var.lower())) as file:
                 return file.read().strip()
         except IOError:
             # mongo username needs to be string and not empty (fix for sphinx)
-            if 'sphinx' in sys.modules:
-                return os.environ.get(var, 'fail')
+            if "sphinx" in sys.modules:
+                return os.environ.get(var, "fail")
             else:
                 return os.environ.get(var)
 
 
-MQTT_HOST = os.environ.get('DEV_MQTT_HOST', '127.0.0.1')
-MQTT_PORT = int(os.environ.get('DEV_MQTT_PORT', 1883))
-MQTT_USERNAME = get_fileenv('DEV_MQTT_USERNAME') or 'lorabridge'
-MQTT_PASSWORD = get_fileenv('DEV_MQTT_PASSWORD') or 'lorabridge'
-DEV_MAN_TOPIC = os.environ.get('DEV_DEV_MAN_TOPIC', "devicemanager")
-REDIS_HOST = os.environ.get('DEV_REDIS_HOST', "localhost")
-REDIS_PORT = int(os.environ.get('DEV_REDIS_PORT', 6379))
-REDIS_DB = int(os.environ.get('DEV_REDIS_DB', 0))
-DISCOVERY_TOPIC = os.environ.get('DEV_DISCOVERY_TOPIC', 'lorabridge/discovery')
-STATE_TOPIC = os.environ.get('DEV_STATE_TOPIC', 'lorabridge/state')
+MQTT_HOST = os.environ.get("DEV_MQTT_HOST", "127.0.0.1")
+MQTT_PORT = int(os.environ.get("DEV_MQTT_PORT", 1883))
+MQTT_USERNAME = get_fileenv("DEV_MQTT_USERNAME") or "lorabridge"
+MQTT_PASSWORD = get_fileenv("DEV_MQTT_PASSWORD") or "lorabridge"
+DEV_MAN_TOPIC = os.environ.get("DEV_DEV_MAN_TOPIC", "devicemanager")
+REDIS_HOST = os.environ.get("DEV_REDIS_HOST", "localhost")
+REDIS_PORT = int(os.environ.get("DEV_REDIS_PORT", 6379))
+REDIS_DB = int(os.environ.get("DEV_REDIS_DB", 0))
+DISCOVERY_TOPIC = os.environ.get("DEV_DISCOVERY_TOPIC", "lorabridge/discovery")
+STATE_TOPIC = os.environ.get("DEV_STATE_TOPIC", "lorabridge/state")
 
 REDIS_SEPARATOR = ":"
 REDIS_PREFIX = "lorabridge:devman"
+REDIS_LB_INDEX = "index:lb"
+REDIS_IEEE_INDEX = "index:ieee"
+REDIS_DEV_NAME = "device:name"
+REDIS_DEV_ATTRS = "device:attributes"
+REDIS_DEV_DATA = "device:data"
 
 
 # The callback for when the client receives a CONNACK response from the server.
@@ -55,41 +60,127 @@ def on_connect(client, userdata, flags, rc):
 
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
-    client.subscribe(userdata['topic'] + '/#')
+    client.subscribe(userdata["topic"] + "/#")
 
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-    rclient = userdata['r_client']
+    rclient = userdata["r_client"]
     data = json.loads(msg.payload)
+    # store device infos in redis
+    match data["type"]:
+        case "name":
+            rclient.hset(
+                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_LB_INDEX]), data["lb_id"], data["ieee_id"]
+            )
+            rclient.hset(
+                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_LB_INDEX]), data["ieee_id"], data["lb_id"]
+            )
+            rclient.set(
+                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NAME, data["lb_id"]]), data["name"]
+            )
+        case "attributes":
+            rclient.sadd(
+                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_ATTRS, data["lb_id"]]),
+                *data["attributes"],
+            )
+        case "data":
+            if lb_id := rclient.hget(
+                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_LB_INDEX]), data["ieee_id"]
+            ):
+                rclient.hset(
+                    REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_DATA, lb_id]),
+                    mapping=data["data"],
+                )
 
-    if not rclient.exists(
-        (rkey := REDIS_SEPARATOR.join([REDIS_PREFIX, (ieee := msg.topic.removeprefix(DEV_MAN_TOPIC + "/"))]))):
-        index = rclient.incr(REDIS_SEPARATOR.join([REDIS_PREFIX, "dev_index"]))
-        dev_data = {"ieee": ieee, "id": index, "measurement": json.dumps(list(data.keys()))}
-        rclient.hset(rkey, mapping=dev_data)
-        rclient.sadd(REDIS_SEPARATOR.join([REDIS_PREFIX, "devices"]), rkey)
-        dev_data['measurement'] = json.loads(dev_data['measurement'])
-        dev_data.update({"value": data})
-        client.publish(DISCOVERY_TOPIC, json.dumps(dev_data))
-        client.publish(STATE_TOPIC, json.dumps(dev_data))
-        # discovery
-    else:
-        # state update
-        dev_data = rclient.hgetall(rkey)
-        str_data = json.dumps(list(data.keys()))
-        if dev_data['measurement'] != str_data:
-            dev_data['measurement'] = str_data
-            rclient.hset(rkey, mapping=dev_data)
-        dev_data['measurement'] = json.loads(dev_data['measurement'])
-        dev_data.update({"value": data})
-        if dev_data['measurement'] != str_data:
-            client.publish(DISCOVERY_TOPIC, json.dumps(dev_data))
-        client.publish(STATE_TOPIC, json.dumps(dev_data))
+    # send data to plugins via mqtt
+    match data["type"]:
+        case "name" | "attributes":
+            if (
+                (
+                    ieee := rclient.hget(
+                        REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_LB_INDEX]), data["lb_id"]
+                    )
+                )
+                and (
+                    name := rclient.get(
+                        REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NAME, data["lb_id"]]),
+                        data["name"],
+                    )
+                )
+                and (
+                    attributes := rclient.smembers(
+                        REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_ATTRS, data["lb_id"]])
+                    )
+                )
+            ):
+                # keys = (
+                #     REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_ATTRS, data["lb_id"]]),
+                #     REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NAME, data["lb_id"]]),
+                # )
+                # if rclient.exists(*keys) == len(keys) and rclient.hexists(
+                #     REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_LB_INDEX]), data["lb_id"]
+                # ):
+                client.publish(
+                    DISCOVERY_TOPIC,
+                    json.dumps(
+                        {
+                            "id": data["lb_id"],
+                            "ieee_id": ieee,
+                            "lb_name": name,
+                            "measurement": attributes,
+                            "value": {x: None for x in attributes},  # backwards compatibility
+                        }
+                    ),
+                )
+        case "data":
+            if lb_id := rclient.hget(
+                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_LB_INDEX]), data["ieee_id"]
+            ):
+                client.publish(
+                    STATE_TOPIC,
+                    json.dumps(
+                        {
+                            "id": lb_id,
+                            "value": data["data"],
+                            "ieee_id": data["ieee_id"],
+                            "measurement": [],  # backwards compatibility
+                        }
+                    ),
+                )
+
+    # if not rclient.exists(
+    #     (
+    #         rkey := REDIS_SEPARATOR.join(
+    #             [REDIS_PREFIX, (ieee := msg.topic.removeprefix(DEV_MAN_TOPIC + "/"))]
+    #         )
+    #     )
+    # ):
+    #     index = rclient.incr(REDIS_SEPARATOR.join([REDIS_PREFIX, "dev_index"]))
+    #     dev_data = {"ieee": ieee, "id": index, "measurement": json.dumps(list(data.keys()))}
+    #     rclient.hset(rkey, mapping=dev_data)
+    #     rclient.sadd(REDIS_SEPARATOR.join([REDIS_PREFIX, "devices"]), rkey)
+    #     dev_data["measurement"] = json.loads(dev_data["measurement"])
+    #     dev_data.update({"value": data})
+    #     client.publish(DISCOVERY_TOPIC, json.dumps(dev_data))
+    #     client.publish(STATE_TOPIC, json.dumps(dev_data))
+    #     # discovery
+    # else:
+    #     # state update
+    #     dev_data = rclient.hgetall(rkey)
+    #     str_data = json.dumps(list(data.keys()))
+    #     if dev_data["measurement"] != str_data:
+    #         dev_data["measurement"] = str_data
+    #         rclient.hset(rkey, mapping=dev_data)
+    #     dev_data["measurement"] = json.loads(dev_data["measurement"])
+    #     dev_data.update({"value": data})
+    #     if dev_data["measurement"] != str_data:
+    #         client.publish(DISCOVERY_TOPIC, json.dumps(dev_data))
+    #     client.publish(STATE_TOPIC, json.dumps(dev_data))
 
 
 def main():
-    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+    logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
@@ -108,5 +199,5 @@ def main():
     client.loop_forever()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
