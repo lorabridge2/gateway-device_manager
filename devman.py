@@ -84,10 +84,11 @@ def on_message(client, userdata, msg):
             )
         case "attributes":
             print(data["attributes"])
-            rclient.sadd(
-                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_ATTRS, str(data["lb_id"])]),
-                *data["attributes"],
-            )
+            if data["attributes"]:
+                rclient.sadd(
+                    REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_ATTRS, str(data["lb_id"])]),
+                    *data["attributes"],
+                )
         case "data":
             if lb_id := rclient.hget(
                 REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_IEEE_INDEX]), data["ieee_id"]
