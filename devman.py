@@ -95,7 +95,7 @@ def on_message(client, userdata, msg):
             ):
                 rclient.hset(
                     REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_DATA, str(lb_id)]),
-                    mapping=data["data"],
+                    mapping={k: str(v) if type(v) == bool else v for k, v in data["data"].items()},
                 )
 
     # send data to plugins via mqtt
