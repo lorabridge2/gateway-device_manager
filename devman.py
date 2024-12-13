@@ -74,22 +74,25 @@ def on_message(client, userdata, msg):
                 REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_LB_INDEX]), data["lb_id"], data["ieee_id"]
             )
             rclient.hset(
-                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_LB_INDEX]), data["ieee_id"], data["lb_id"]
+                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_IEEE_INDEX]),
+                data["ieee_id"],
+                data["lb_id"],
             )
             rclient.set(
-                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NAME, data["lb_id"]]), data["name"]
+                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NAME, str(data["lb_id"])]),
+                data["name"],
             )
         case "attributes":
             rclient.sadd(
-                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_ATTRS, data["lb_id"]]),
+                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_ATTRS, str(data["lb_id"])]),
                 *data["attributes"],
             )
         case "data":
             if lb_id := rclient.hget(
-                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_LB_INDEX]), data["ieee_id"]
+                REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_IEEE_INDEX]), data["ieee_id"]
             ):
                 rclient.hset(
-                    REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_DATA, lb_id]),
+                    REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_DATA, str(lb_id)]),
                     mapping=data["data"],
                 )
 
@@ -104,13 +107,13 @@ def on_message(client, userdata, msg):
                 )
                 and (
                     name := rclient.get(
-                        REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NAME, data["lb_id"]]),
+                        REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NAME, str(data["lb_id"])]),
                         data["name"],
                     )
                 )
                 and (
                     attributes := rclient.smembers(
-                        REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_ATTRS, data["lb_id"]])
+                        REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_ATTRS, str(data["lb_id"])])
                     )
                 )
             ):
