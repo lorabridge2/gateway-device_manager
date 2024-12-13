@@ -130,7 +130,7 @@ def on_message(client, userdata, msg):
                             "id": data["lb_id"],
                             "ieee_id": ieee,
                             "lb_name": name,
-                            "measurement": attributes,
+                            "measurement": list(attributes),
                             "value": {x: None for x in attributes},  # backwards compatibility
                         }
                     ),
