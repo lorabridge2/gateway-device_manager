@@ -83,6 +83,7 @@ def on_message(client, userdata, msg):
                 data["name"],
             )
         case "attributes":
+            print(data["attributes"])
             rclient.sadd(
                 REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_ATTRS, str(data["lb_id"])]),
                 *data["attributes"],
