@@ -107,8 +107,7 @@ def on_message(client, userdata, msg):
                 )
                 and (
                     name := rclient.get(
-                        REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NAME, str(data["lb_id"])]),
-                        data["name"],
+                        REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NAME, str(data["lb_id"])])
                     )
                 )
                 and (
