@@ -8,6 +8,10 @@ import sys
 import redis
 import logging
 
+import redis.asyncio
+import redis.client
+import redis.utils
+
 
 def get_fileenv(var: str):
     """Tries to read the provided env var name + _FILE first and read the file at the path of env var value.
@@ -52,6 +56,7 @@ REDIS_IEEE_INDEX = "index:ieee"
 REDIS_DEV_NAME = "device:name"
 REDIS_DEV_ATTRS = "device:attributes"
 REDIS_DEV_DATA = "device:data"
+REDIS_DEV_NOTIFICATION = "device:notification"
 
 
 # The callback for when the client receives a CONNACK response from the server.
@@ -65,7 +70,7 @@ def on_connect(client, userdata, flags, rc):
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-    rclient = userdata["r_client"]
+    rclient: redis.Redis = userdata["r_client"]
     data = json.loads(msg.payload)
     # store device infos in redis
     match data["type"]:
@@ -136,6 +141,9 @@ def on_message(client, userdata, msg):
                             "value": {x: None for x in attributes},  # backwards compatibility
                         }
                     ),
+                )
+                rclient.publish(
+                    REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NOTIFICATION]), data["lb_id"]
                 )
         case "data":
             if lb_id := rclient.hget(
