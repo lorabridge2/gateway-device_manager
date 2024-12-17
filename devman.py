@@ -143,7 +143,15 @@ def on_message(client, userdata, msg):
                     ),
                 )
                 rclient.publish(
-                    REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NOTIFICATION]), data["lb_id"]
+                    REDIS_SEPARATOR.join([REDIS_PREFIX, REDIS_DEV_NOTIFICATION]),
+                    json.dumps(
+                        {
+                            "lb_id": data["lb_id"],
+                            "ieee": ieee,
+                            "name": name,
+                            "attributes": list(attributes),
+                        }
+                    ),
                 )
         case "data":
             if lb_id := rclient.hget(
