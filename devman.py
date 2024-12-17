@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding=utf-8 -*-
 
+from enum import IntEnum
 import paho.mqtt.client as mqtt
 import json
 import os
@@ -11,6 +12,7 @@ import logging
 import redis.asyncio
 import redis.client
 import redis.utils
+import base64
 
 
 def get_fileenv(var: str):
@@ -48,6 +50,10 @@ REDIS_PORT = int(os.environ.get("DEV_REDIS_PORT", 6379))
 REDIS_DB = int(os.environ.get("DEV_REDIS_DB", 0))
 DISCOVERY_TOPIC = os.environ.get("DEV_DISCOVERY_TOPIC", "lorabridge/discovery")
 STATE_TOPIC = os.environ.get("DEV_STATE_TOPIC", "lorabridge/state")
+DEV_EUI = os.environ.get("DEV_EUI").removeprefix(r"\x")
+APP_ID = None
+with open(f"/device/{DEV_EUI}.json") as dfile:
+    APP_ID = json.loads(dfile.read())["application_id"]
 
 REDIS_SEPARATOR = ":"
 REDIS_PREFIX = "lorabridge:devman"
@@ -59,10 +65,46 @@ REDIS_DEV_DATA = "device:data"
 REDIS_DEV_NOTIFICATION = "device:notification"
 
 
+class action_bytes(IntEnum):
+    REMOVE_NODE = 0
+    ADD_NODE = 1
+    ADD_DEVICE = 2
+    PARAMETER_UPDATE = 3
+    CONNECT_NODE = 4
+    DISCONNECT_NODE = 5
+    ENABLE_FLOW = 6
+    DISABLE_FLOW = 7
+    TIME_SYNC_RESPONSE = 8
+    ADD_FLOW = 9
+    FLOW_COMPLETE = 10
+    REMOVE_FLOW = 11
+    UPLOAD_FLOW = 12
+    GET_DEVICES = 13
+
+
+def send_commands(commands, client):
+    msgs = [
+        {
+            "topic": f"application/{APP_ID}/device/{DEV_EUI}/command/down",
+            "payload": json.dumps(
+                {
+                    "confirmed": True,
+                    "fPort": 10,
+                    "devEui": DEV_EUI,
+                    "data": base64.b64encode(bytes(cmd)).decode(),
+                }
+            ),
+        }
+        for cmd in commands
+    ]
+    for msg in msgs:
+        client.publish(msg["topic"], msg["payload"])
+
+
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     logging.info("Connected with result code " + str(rc))
-
+    send_commands([action_bytes.GET_DEVICES, 0], client)
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
     client.subscribe(userdata["topic"] + "/#")
