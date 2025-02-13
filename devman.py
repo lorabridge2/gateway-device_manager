@@ -52,7 +52,7 @@ DISCOVERY_TOPIC = os.environ.get("DEV_DISCOVERY_TOPIC", "lorabridge/discovery")
 STATE_TOPIC = os.environ.get("DEV_STATE_TOPIC", "lorabridge/state")
 DEV_EUI = os.environ.get("DEV_EUI").removeprefix(r"\x")
 APP_ID = None
-with open(f"/device/{DEV_EUI}.json") as dfile:
+with open(f"/device/{DEV_EUI.lower()}.json") as dfile:
     APP_ID = json.loads(dfile.read())["application_id"]
 
 REDIS_SEPARATOR = ":"
