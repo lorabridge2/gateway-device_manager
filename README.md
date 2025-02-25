@@ -1,6 +1,6 @@
 # Gateway Device Manager
 
-This repository is part of the [LoRaBridge](https://github.com/lorabridge/lorabridge) project.
+This repository is part of the [LoRaBridge](https://github.com/lorabridge2/lorabridge) project.
 It provides the docker image for the Device Management used on our gateway device.
 
 The Device Manager is a self-provided Python3 application keeping track of the discovered devices via the Redis server. 
@@ -19,6 +19,7 @@ These messages are picked up by the HA Integration service.
 - `DEV_REDIS_DB`: Number of the database used inside Redis
 - `DEV_DISCOVERY_TOPIC`: MQTT topic used for announcing newly discovered devices (default: `lorabridge/discovery`)
 - `DEV_STATE_TOPIC`: MQTT topic used for announcing states (measurements) of devices (default: `lorabridge/state`)
+- `DEV_EUI`: Device eui of bridge
 
 ## License
 
